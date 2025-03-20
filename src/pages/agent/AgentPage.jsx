@@ -1,5 +1,6 @@
 import { GoPlus } from "react-icons/go";
 import agentIconButton from "/public/images/icons/agentIconButton.svg";
+import { IoCopyOutline } from "react-icons/io5";
 function AgentPage() {
   return (
     <div>
@@ -43,7 +44,9 @@ function AgentPage() {
               <h2 className="text-[#09101D] text-[32px] font-semibold">Tech</h2>
               <div className="flex gap-2">
                 <div className="bg-white border-[#DADEE3] border-2 h-[100px] p-4 rounded-[18px] w-[494px]">
-                  <div></div>
+                  <div className="flex justify-end gap-2">
+                    <IoCopyOutline size={20} />
+                  </div>
                   <div>
                     <img src="" alt="" />
                     <h3>pro coder</h3>

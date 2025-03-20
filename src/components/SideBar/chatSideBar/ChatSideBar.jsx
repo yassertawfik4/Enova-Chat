@@ -8,8 +8,10 @@ import { FaSortAlphaDownAlt } from "react-icons/fa";
 import chatgptLogo from "/public/images/gptimage.png";
 import { useEffect, useState } from "react";
 import axiosInstance from "../../../api/axiosInstance";
+import { Link, useNavigate } from "react-router";
 function ChatSideBar() {
   const [allChats, setAllChats] = useState([]);
+  const navigate = useNavigate();
   const fetchAllChats = async () => {
     try {
       const response = await axiosInstance.get("Chat/GetAll", {
@@ -25,14 +27,35 @@ function ChatSideBar() {
   };
   useEffect(() => {
     fetchAllChats();
+
+    const refreshInterval = setInterval(fetchAllChats, 10000);
+
+    return () => clearInterval(refreshInterval);
   }, []);
+  const refreshChats = () => {
+    fetchAllChats();
+  };
+  window.refreshChatSidebar = refreshChats;
+  const handelNewChat = () => {
+    sessionStorage.setItem("clearChat", "true");
+    navigate("/");
+    setTimeout(() => {
+      if (window.refreshChatPage) {
+        window.refreshChatPage();
+      }
+      fetchAllChats();
+    }, 100);
+  };
   return (
     <div className="bg-[#F4F6FF] h-screen rounded-[48px] w-[305px] left-0 ms-2 py-2 sticky top-0 z-10">
       <div className="flex justify-center items-center py-6">
         <img src={logo} alt="" />
       </div>
       <div className="px-3">
-        <div className="flex bg-gradient-to-r rounded-[48px] cursor-pointer from-[#2E5AAC] items-center px-3 py-1.5 to-[#132546]">
+        <div
+          onClick={handelNewChat}
+          className="flex bg-gradient-to-r rounded-[48px] cursor-pointer from-[#2E5AAC] items-center px-3 py-1.5 to-[#132546]"
+        >
           <button className="flex text-[#FFFFFF] cursor-pointer gap-2 items-center">
             <IoChatbubbleEllipsesOutline size={24} />{" "}
             <span className="text-[16px] font-normal">New chat</span>
@@ -66,8 +89,9 @@ function ChatSideBar() {
       <div className="px-2">
         <div className="flex flex-col bg-white h-[calc(100vh-350px)] rounded-[24px] gap-2 hover:overflow-y-scroll overflow-y-auto px-2 py-4">
           {allChats.map((chat) => (
-            <div
+            <Link
               key={chat.id}
+              to={`/chat/${chat.id}`}
               className="flex p-2 rounded-lg cursor-pointer gap-4 hover:bg-gray-50 items-center transition-colors"
             >
               <img src={chatgptLogo} alt="" className="flex-shrink-0 h-8 w-8" />
@@ -79,7 +103,7 @@ function ChatSideBar() {
                   {chat.title}
                 </span>
               </div>
-            </div>
+            </Link>
           ))}
         </div>
       </div>

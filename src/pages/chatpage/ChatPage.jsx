@@ -1,21 +1,36 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import * as signalR from "@microsoft/signalr";
 import ChatInput from "../../components/chat/ChatInput";
 import ChatMessage from "../../components/chat/ChatMessage";
+import axiosInstance from "../../api/axiosInstance";
+import { useNavigate, useParams } from "react-router";
 
 function ChatPage() {
   const [messages, setMessages] = useState([]);
   const [connection, setConnection] = useState(null);
   const [isStreaming, setIsStreaming] = useState(false);
   const messagesEndRef = useRef(null);
+  const navigate = useNavigate();
   // مرجع لآخر معرف رسالة تم استلامها
   const lastMessageIdRef = useRef("");
   // تتبع ما إذا كانت هذه أول قطعة في الرسالة
   const isFirstChunkRef = useRef(true);
+  // أضف مرجع للتتبع وقت التحميل
+  const loadTimeRef = useRef(Date.now());
 
   const token =
-    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwMTk1YTkxNC01ODc4LTdkMDQtYjE5NS1lODdlYmFlZGU3NzciLCJlbWFpbCI6Inlhc3NlcjFAbWFpbC5jb20iLCJuYW1lIjoieWFzc29yc3d4IiwianRpIjoiNTUwYjg0NGEtYTE3NC00OTZlLWIwODktMjhiNmJkMGRhZmVjIiwiYXVkIjpbIlN3YWdnZXJVSSIsIlN3YWdnZXJVSSJdLCJuYmYiOjE3NDIzNTQ3OTMsImV4cCI6MTc0Mjk1OTU5MywiaWF0IjoxNzQyMzU0NzkzLCJpc3MiOiJJbnRlcm5zaGlwLVBsYXRmb3JtIn0.jmkngrifuiQLw27YwZG9XoAsqAhuj9motxDmZyqEwh4";
-  const chatId = "0e3905bc-ebc4-4061-801c-18faf42a1ebf";
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwMTk1YTkxNC01ODc4LTdkMDQtYjE5NS1lODdlYmFlZGU3NzciLCJlbWFpbCI6Inlhc3NlcjFAbWFpbC5jb20iLCJuYW1lIjoieWFzc29yc3d4IiwianRpIjoiZGRlNzYxNTktMmQ0Yi00NjYyLWFiYzItNGQ2MTE3ZjdmYzdiIiwiYXVkIjpbIlN3YWdnZXJVSSIsIlN3YWdnZXJVSSJdLCJuYmYiOjE3NDI0MzUyNjUsImV4cCI6MTc0MzA0MDA2NSwiaWF0IjoxNzQyNDM1MjY1LCJpc3MiOiJJbnRlcm5zaGlwLVBsYXRmb3JtIn0.8F_tRBZ00HkA71adeI1VF_ZUZt_XL5sU4wqknF_kfIQ";
+  // const chatId = "0e3905bc-ebc4-4061-801c-18faf42a1ebf";
+  const { chatId } = useParams();
+  console.log(chatId);
+
+  // إضافة وظيفة لمسح الرسائل
+  const clearMessages = useCallback(() => {
+    setMessages([]);
+    setIsStreaming(false);
+    lastMessageIdRef.current = "";
+    isFirstChunkRef.current = true;
+  }, []);
 
   useEffect(() => {
     const newConnection = new signalR.HubConnectionBuilder()
@@ -31,10 +46,14 @@ function ChatPage() {
       .start()
       .then(() => {
         console.log("✅ Connected to SignalR Hub");
-        return newConnection.invoke("JoinChatSession", chatId);
+        if (chatId) {
+          return newConnection.invoke("JoinChatSession", chatId);
+        }
       })
       .then(() => {
-        console.log("✅ Joined chat session:", chatId);
+        if (chatId) {
+          console.log("✅ Joined chat session:", chatId);
+        }
       })
       .catch((err) => console.error("❌ Connection failed: ", err));
 
@@ -43,35 +62,14 @@ function ChatPage() {
         newConnection.stop();
       }
     };
-  }, []);
+  }, [chatId]);
 
   useEffect(() => {
     if (!connection) return;
 
-    // تحسين معالجة قطع الرسائل المستلمة
+    // معالجة استلام جزء من الرسالة
     const handleReceiveMessageChunk = (messageId, chunk) => {
-      // سجل في الكونسول معلومات عن القطعة
       console.log("📩 Received chunk:", messageId, chunk);
-
-      // إذا كان معرف الرسالة مختلفًا عن آخر معرف تم استلامه
-      // فهذا يعني أنها رسالة جديدة
-      if (messageId !== lastMessageIdRef.current) {
-        lastMessageIdRef.current = messageId;
-        isFirstChunkRef.current = true;
-      }
-
-      // تجاهل القطعة الأولى التي قد تحتوي على رسالة المستخدم
-      if (isFirstChunkRef.current) {
-        isFirstChunkRef.current = false;
-
-        // تحقق مما إذا كانت القطعة تحتوي على نص رسالة المستخدم
-        // وإذا كان الأمر كذلك، قم بتخطي هذه القطعة
-        const lastUserMessage = messages.findLast((msg) => msg.isUser)?.text;
-        if (lastUserMessage && chunk.includes(lastUserMessage)) {
-          console.log("Skipping first chunk that contains user message");
-          return;
-        }
-      }
 
       // تأكد من أن محتوى القطعة صالح وليست فارغة
       const chunkContent = chunk || "";
@@ -82,48 +80,66 @@ function ChatPage() {
 
       setIsStreaming(true);
 
-      // تحديث رسائل المحادثة بشكل أكثر كفاءة باستخدام وظيفة الحالة المحدثة
-      setMessages((prev) => {
-        // Find any pending message (with empty text)
-        const pendingMessageIndex = prev.findIndex(
-          (msg) =>
-            !msg.isUser &&
-            !msg.complete &&
-            msg.text === "" &&
-            msg.id.startsWith("ai-pending-")
-        );
+      // إذا كان معرف الرسالة مختلفًا عن آخر معرف تم استلامه
+      // فهذا يعني أنها رسالة جديدة
+      if (messageId !== lastMessageIdRef.current) {
+        lastMessageIdRef.current = messageId;
 
-        // ابحث عن رسالة بنفس المعرف
-        const messageIndex = prev.findIndex((msg) => msg.id === messageId);
+        setMessages((prev) => {
+          // ابحث عن رسالة معلقة فارغة لاستبدالها
+          const pendingIndex = prev.findIndex(
+            (msg) =>
+              !msg.isUser && !msg.complete && msg.id.startsWith("ai-pending-")
+          );
 
-        if (messageIndex >= 0) {
-          // تحديث رسالة موجودة
-          const updatedMessages = [...prev];
-          updatedMessages[messageIndex].text += chunkContent;
-          return updatedMessages;
-        } else if (pendingMessageIndex >= 0) {
-          // Replace the pending message with the actual message
-          const updatedMessages = [...prev];
-          updatedMessages[pendingMessageIndex] = {
-            id: messageId,
-            text: chunkContent,
-            isUser: false,
-            complete: false,
-          };
-          return updatedMessages;
-        } else {
-          // إنشاء رسالة جديدة فقط إذا كان المحتوى غير فارغ
-          return [
-            ...prev,
-            {
+          if (pendingIndex >= 0) {
+            const updatedMessages = [...prev];
+            updatedMessages[pendingIndex] = {
               id: messageId,
               text: chunkContent,
               isUser: false,
               complete: false,
-            },
-          ];
-        }
-      });
+            };
+            return updatedMessages;
+          } else {
+            return [
+              ...prev,
+              {
+                id: messageId,
+                text: chunkContent,
+                isUser: false,
+                complete: false,
+              },
+            ];
+          }
+        });
+      } else {
+        // إضافة محتوى إلى رسالة موجودة بنفس المعرف
+        setMessages((prev) => {
+          const messageIndex = prev.findIndex((msg) => msg.id === messageId);
+
+          if (messageIndex >= 0) {
+            const updatedMessages = [...prev];
+            const currentText = updatedMessages[messageIndex].text;
+
+            // تجنب التكرار مع ضمان عرض الرسالة فوراً
+            // نتحقق فقط من التكرار إذا كانت القطعة أطول من حرف واحد
+            // لتجنب التأثير على الأداء عند عرض الرسالة حرفاً بحرف
+            if (chunkContent.length > 3 && currentText.endsWith(chunkContent)) {
+              console.log("Skipping duplicate chunk:", chunkContent);
+            } else {
+              updatedMessages[messageIndex] = {
+                ...updatedMessages[messageIndex],
+                text: currentText + chunkContent,
+              };
+            }
+
+            return updatedMessages;
+          }
+
+          return prev;
+        });
+      }
     };
 
     // تحسين معالجة نهاية بث الرسالة
@@ -250,39 +266,79 @@ function ChatPage() {
     };
   }, [connection, messages]);
 
+  // Add a function to handle sending messages that maintains the current chat session
   const handleSendMessage = async (message) => {
-    if (message.trim() === "" || !connection) return;
+    // Avoid sending empty messages
+    if (!message.trim()) return;
 
-    // إنشاء معرف مؤقت لرسالة المستخدم
+    // Create a temporary ID for the user message
     const userMessageId = `user-${Date.now()}`;
 
-    // إضافة رسالة المستخدم إلى واجهة المستخدم فورًا
+    // Add the user message to the UI immediately
     setMessages((prev) => [
       ...prev,
-      { id: userMessageId, text: message, isUser: true, complete: true },
+      {
+        id: userMessageId,
+        text: message,
+        isUser: true,
+        complete: true,
+      },
     ]);
 
-    // Create an empty AI message with streaming state immediately
-    // This will show the typing indicator right away
+    // Add pending AI message to show typing indicator
     const pendingAiMessageId = `ai-pending-${Date.now()}`;
     setMessages((prev) => [
       ...prev,
-      { id: pendingAiMessageId, text: "", isUser: false, complete: false },
+      {
+        id: pendingAiMessageId,
+        text: "",
+        isUser: false,
+        complete: false,
+      },
     ]);
 
     // Set streaming state to true
     setIsStreaming(true);
 
     try {
-      // إرسال الرسالة إلى الخادم
-      await connection.invoke("SendMessage", chatId, message);
-      console.log("📤 Sent message:", message);
+      // If we have an existing chatId, use it - otherwise create a new chat
+      if (chatId) {
+        // We're in an existing chat, send the message using SignalR
+        console.log("Sending message to existing chat:", chatId);
+        await connection.invoke("SendMessage", chatId, message);
+      } else {
+        // We need to create a new chat first
+        console.log("Creating new chat for first message");
+        const response = await axiosInstance.post(
+          "Chat/Create",
+          {
+            modelId: "ce78f5da-85f7-4127-a393-0998046e7005", // Use appropriate model ID
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
 
-      // When the actual response starts coming in through the SignalR events,
-      // the handlers will either update this pending message or replace it
+        // Get the new chat ID from the response
+        const newChatId = response.data;
+        console.log("Created new chat with ID:", newChatId);
 
-      // إعادة تعيين مؤشر القطع الأولى للرسالة التالية
-      isFirstChunkRef.current = true;
+        // Update URL without page refresh
+        window.history.pushState({}, "", `/chat/${newChatId}`);
+
+        // Join the new chat session
+        await connection.invoke("JoinChatSession", newChatId);
+        console.log("Joined new chat session:", newChatId);
+
+        // Send the message to the new chat
+        await connection.invoke("SendMessage", newChatId, message);
+        console.log("Sent message to new chat:", message);
+
+        // Reset first chunk reference for proper message handling
+        isFirstChunkRef.current = true;
+      }
     } catch (error) {
       console.error("❌ Error sending message:", error);
       // In case of error, remove the pending message
@@ -290,6 +346,106 @@ function ChatPage() {
         prev.filter((msg) => msg.id !== pendingAiMessageId)
       );
       setIsStreaming(false);
+    }
+  };
+
+  //fetch chat Id hestiory
+
+  const getChatbyId = async () => {
+    try {
+      const response = await axiosInstance.get(`Chat/${chatId}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (response.data) {
+        // Load chat messages
+        if (response.data.messages && response.data.messages.length > 0) {
+          const formattedMessages = response.data.messages.map((msg) => ({
+            id: msg.id,
+            text: msg.content,
+            isUser: !msg.isFromAi,
+            complete: true,
+          }));
+
+          setMessages(formattedMessages);
+        }
+      }
+      console.log(response.data);
+    } catch (error) {
+      console.log(error);
+    }
+  };
+
+  // تعديل useEffect المسؤول عن التعامل مع تغيير chatId
+  useEffect(() => {
+    // إعادة تعيين مرجع وقت التحميل عند كل تغيير في chatId
+    loadTimeRef.current = Date.now();
+
+    // مسح الرسائل بغض النظر عن وجود chatId
+    clearMessages();
+
+    // إذا كان هناك معرف محادثة، قم بتحميل محتواها
+    if (chatId) {
+      getChatbyId();
+    }
+  }, [chatId, clearMessages]);
+
+  // إضافة useEffect جديد للتعامل مع الصفحة الرئيسية
+  useEffect(() => {
+    // التحقق إذا كنا في الصفحة الرئيسية (/)
+    if (window.location.pathname === "/") {
+      // تأكد من مسح الرسائل عند تحميل الصفحة الرئيسية
+      clearMessages();
+    }
+  }, [window.location.pathname, clearMessages]);
+
+  // في بداية تشغيل المكون، أضف دالة تحديث عامة
+  useEffect(() => {
+    // إتاحة وظيفة مسح الرسائل كدالة عامة للاستدعاء من أي مكان
+    window.refreshChatPage = () => {
+      clearMessages();
+    };
+
+    // التحقق من وحدة تخزين الجلسة
+    const shouldClear = sessionStorage.getItem("clearChat");
+    if (shouldClear === "true") {
+      clearMessages();
+      sessionStorage.removeItem("clearChat");
+    }
+
+    return () => {
+      // إزالة الوظيفة العامة عند إلغاء تحميل المكون
+      delete window.refreshChatPage;
+    };
+  }, [clearMessages]);
+
+  // Add a function to stop the stream
+  const stopStreamingResponse = () => {
+    if (connection) {
+      // Call the SignalR method to stop streaming
+      connection.invoke("StopGenerating").catch((err) => {
+        console.error("Error stopping generation:", err);
+      });
+
+      // Also update local state to reflect stopped streaming
+      setIsStreaming(false);
+
+      // Find the incomplete message and mark it as complete
+      setMessages((prev) => {
+        const updatedMessages = [...prev];
+        const streamingMessageIndex = updatedMessages.findIndex(
+          (msg) => !msg.complete && !msg.isUser
+        );
+
+        if (streamingMessageIndex !== -1) {
+          updatedMessages[streamingMessageIndex].complete = true;
+          // Optionally append a note that generation was stopped
+          // updatedMessages[streamingMessageIndex].text += " [Generation stopped]";
+        }
+
+        return updatedMessages;
+      });
     }
   };
 
@@ -306,7 +462,7 @@ function ChatPage() {
         <div className="flex flex-col justify-between p-4 w-full items-center">
           {/* منطقة عرض الرسائل */}
           <div
-            className={`flex-1 w-full  mb-32 ${
+            className={`flex-1 w-full pb-40 ${
               messages.length === 0 ? "flex justify-center items-center" : ""
             }`}
           >
@@ -316,7 +472,7 @@ function ChatPage() {
                   (msg) =>
                     (msg.text && msg.text.trim() !== "") ||
                     (!msg.text && !msg.isUser && !msg.complete)
-                ) // Allow empty non-user messages that are not complete (typing indicator)
+                )
                 .map((msg, index) => (
                   <ChatMessage
                     key={`${msg.id}-${index}`}
@@ -330,21 +486,22 @@ function ChatPage() {
 
           {/* منطقة الإدخال مع العنوان */}
           <div
-            className={`w-full flex flex-col items-center ${
+            className={`w-full flex flex-col items-center bg-white pb-10 pt- px-10 ${
               messages.length === 0
                 ? "fixed top-1/2 transform -translate-y-1/2"
-                : "fixed bottom-5"
-            }`}
+                : "fixed bottom-0"
+            } max-w-[calc(100vw-450px)] z-10`}
           >
             {messages.length === 0 && (
               <h2 className="text-3xl font-medium mb-4">
                 What can I help with?
               </h2>
             )}
-            <div className="flex bg-[#F4F6FF] h-[120px] justify-center p-4 rounded-[50px] shadow-sm w-[750px] gap-2 items-center">
+            <div className="flex bg-[#F4F6FF] h-[120px] justify-center p-4 rounded-[50px] shadow-sm w-[750px] backdrop-blur-sm backdrop-filter gap-2 items-center">
               <ChatInput
                 onSendMessage={handleSendMessage}
-                disabled={isStreaming}
+                isStreaming={isStreaming}
+                onStopStream={stopStreamingResponse}
               />
             </div>
           </div>

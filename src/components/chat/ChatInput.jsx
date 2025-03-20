@@ -17,8 +17,8 @@ const ChatInput = ({ onSendMessage }) => {
       onSubmit={handleSubmit} // دالة الإرسال
     >
       {({ values }) => (
-        <Form className="flex items-center gap-2 w-full relative">
-          <div className="flex-1 flex items-center gap-2 ">
+        <Form className="flex w-full gap-2 items-center relative">
+          <div className="flex flex-1 gap-2 items-center">
             <PiBookBookmarkLight
               className="cursor-pointer font-medium"
               size={23}
@@ -29,7 +29,7 @@ const ChatInput = ({ onSendMessage }) => {
             type="text"
             name="message"
             placeholder="Type a message..."
-            className="p-2 border border-gray-300 rounded-[50px] w-full h-[88px] border-none outline-none px-5 bg-white"
+            className="bg-white border border-gray-300 border-none h-[88px] p-2 rounded-[50px] w-full outline-none px-5"
           />
           <button
             type="submit"
