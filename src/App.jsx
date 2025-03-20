@@ -1,4 +1,3 @@
-// App.jsx - Updated with sidebar layout
 import { Route, Routes } from "react-router";
 import "./App.css";
 import AuthFormPage from "./pages/user/AuthFormPage/AuthFormPage";
@@ -7,14 +6,23 @@ import ResetPassword from "./pages/user/resetPassword/ResetPassword";
 import ChatPage from "./pages/chatpage/ChatPage";
 import { SideLinks } from "./components/SideBar/SideLinks";
 import { useLocation } from "react-router";
+import AgentPage from "./pages/agent/AgentPage";
+import ChatSideBar from "./components/SideBar/chatSideBar/ChatSideBar";
 
 const AppLayout = ({ children }) => {
   const location = useLocation();
   const isAuthPage = location.pathname.startsWith("/auth");
+  const isChatPage = location.pathname === "/";
 
   return (
     <div className="flex w-full px-2 py-2">
-      {!isAuthPage && <SideLinks />}
+      {!isAuthPage && (
+        <div className="flex">
+          <SideLinks />
+          {isChatPage && <ChatSideBar />}{" "}
+          {/* Render ChatSideBar only on the chat page */}
+        </div>
+      )}
       <div className="flex-1">{children}</div>
     </div>
   );
@@ -28,14 +36,7 @@ function App() {
         <Route path="/auth/forgetPassword" element={<ForgetPassword />} />
         <Route path="/auth/reset-Password" element={<ResetPassword />} />
         <Route path="/" element={<ChatPage />} />
-        <Route
-          path="/agents"
-          element={
-            <div>
-              <h1>Agents Page</h1>
-            </div>
-          }
-        />
+        <Route path="/agents" element={<AgentPage />} />
         <Route
           path="/prompts"
           element={

@@ -12,13 +12,11 @@ const ChatInput = ({ onSendMessage }) => {
   };
 
   return (
-    
     <Formik
       initialValues={{ message: "" }} // القيم الابتدائية للنموذج
       onSubmit={handleSubmit} // دالة الإرسال
     >
       {({ values }) => (
-        
         <Form className="flex items-center gap-2 w-full relative">
           <div className="flex-1 flex items-center gap-2 ">
             <PiBookBookmarkLight

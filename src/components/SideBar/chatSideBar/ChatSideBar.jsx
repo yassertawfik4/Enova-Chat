@@ -6,25 +6,44 @@ import { MdChecklistRtl } from "react-icons/md";
 import { TfiFilter } from "react-icons/tfi";
 import { FaSortAlphaDownAlt } from "react-icons/fa";
 import chatgptLogo from "/public/images/gptimage.png";
+import { useEffect, useState } from "react";
+import axiosInstance from "../../../api/axiosInstance";
 function ChatSideBar() {
+  const [allChats, setAllChats] = useState([]);
+  const fetchAllChats = async () => {
+    try {
+      const response = await axiosInstance.get("Chat/GetAll", {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("accessUsertoken")}`,
+        },
+      });
+      setAllChats(response.data);
+      console.log(response.data);
+    } catch (error) {
+      console.log(error);
+    }
+  };
+  useEffect(() => {
+    fetchAllChats();
+  }, []);
   return (
-    <div className="py-2 bg-[#F4F6FF] w-[305px] h-screen rounded-[48px] ms-2">
+    <div className="bg-[#F4F6FF] h-screen rounded-[48px] w-[305px] left-0 ms-2 py-2 sticky top-0 z-10">
       <div className="flex justify-center items-center py-6">
         <img src={logo} alt="" />
       </div>
       <div className="px-3">
-        <div className="bg-gradient-to-r from-[#2E5AAC] to-[#132546] cursor-pointer flex px-3 py-1.5 items-center rounded-[48px] ">
-          <button className="flex items-center gap-2 text-[#FFFFFF] cursor-pointer">
+        <div className="flex bg-gradient-to-r rounded-[48px] cursor-pointer from-[#2E5AAC] items-center px-3 py-1.5 to-[#132546]">
+          <button className="flex text-[#FFFFFF] cursor-pointer gap-2 items-center">
             <IoChatbubbleEllipsesOutline size={24} />{" "}
             <span className="text-[16px] font-normal">New chat</span>
           </button>
         </div>
-        <div className="my-4 relative flex items-center">
-          <div className="absolute left-3 text-gray-400">
+        <div className="flex items-center my-4 relative">
+          <div className="text-gray-400 absolute left-3">
             <CiSearch size={24} />
           </div>
           <input
-            className="bg-white rounded-[48px] pl-10 pr-3 py-1.5 outline-none w-full border border-[#DADEE3]"
+            className="bg-white border border-[#DADEE3] rounded-[48px] w-full outline-none pl-10 pr-3 py-1.5"
             type="search"
             placeholder="Search"
           />
@@ -45,28 +64,23 @@ function ChatSideBar() {
         </div>
       </div>
       <div className="px-2">
-        <div className=" bg-white rounded-[24px] h-auto py-4 px-2 flex flex-col gap-7">
-          <div className="flex items-center gap-4 ">
-            <img src={chatgptLogo} alt="" />
-            <div className="flex flex-col">
-              <span className="text-[12px] font-normal">1m</span>
-              <span className="text-[12px] font-medium"> Coding Help</span>
+        <div className="flex flex-col bg-white h-[calc(100vh-350px)] rounded-[24px] gap-2 hover:overflow-y-scroll overflow-y-auto px-2 py-4">
+          {allChats.map((chat) => (
+            <div
+              key={chat.id}
+              className="flex p-2 rounded-lg cursor-pointer gap-4 hover:bg-gray-50 items-center transition-colors"
+            >
+              <img src={chatgptLogo} alt="" className="flex-shrink-0 h-8 w-8" />
+              <div className="flex flex-1 flex-col overflow-hidden">
+                <span className="text-[12px] text-gray-500 font-normal">
+                  1m
+                </span>
+                <span className="text-[12px] font-medium max-w-full truncate">
+                  {chat.title}
+                </span>
+              </div>
             </div>
-          </div>
-          <div className="flex items-center gap-4 ">
-            <img src={chatgptLogo} alt="" />
-            <div className="flex flex-col">
-              <span className="text-[12px] font-normal">1m</span>
-              <span className="text-[12px] font-medium"> Coding Help</span>
-            </div>
-          </div>
-          <div className="flex items-center gap-4 ">
-            <img src={chatgptLogo} alt="" />
-            <div className="flex flex-col">
-              <span className="text-[12px] font-normal">1m</span>
-              <span className="text-[12px] font-medium"> Coding Help</span>
-            </div>
-          </div>
+          ))}
         </div>
       </div>
     </div>
