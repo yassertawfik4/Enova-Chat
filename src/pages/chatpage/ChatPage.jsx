@@ -266,54 +266,50 @@ function ChatPage() {
     };
   }, [connection, messages]);
 
-  // Add a function to handle sending messages that maintains the current chat session
+  // تعديل دالة handleSendMessage
   const handleSendMessage = async (message) => {
-    // Avoid sending empty messages
-    if (!message.trim()) return;
-
-    // Create a temporary ID for the user message
-    const userMessageId = `user-${Date.now()}`;
-
-    // Add the user message to the UI immediately
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: userMessageId,
-        text: message,
-        isUser: true,
-        complete: true,
-      },
-    ]);
-
-    // Add pending AI message to show typing indicator
-    const pendingAiMessageId = `ai-pending-${Date.now()}`;
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: pendingAiMessageId,
-        text: "",
-        isUser: false,
-        complete: false,
-      },
-    ]);
-
-    // Set streaming state to true
-    setIsStreaming(true);
-
     try {
-      // If we have an existing chatId, use it - otherwise create a new chat
+      // إضافة رسالة المستخدم إلى الواجهة فوراً
+      const userMessageId = `user-${Date.now()}`;
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: userMessageId,
+          text: message,
+          isUser: true,
+          complete: true,
+        },
+      ]);
+
+      // إضافة رسالة معلقة للذكاء الاصطناعي
+      const pendingMessageId = `ai-pending-${Date.now()}`;
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: pendingMessageId,
+          text: "",
+          isUser: false,
+          complete: false,
+        },
+      ]);
+
+      setIsStreaming(true);
+
+      console.log("Current chatId:", chatId);
+
+      // الخطوة 1: تحديد إذا كنا بحاجة لإنشاء محادثة جديدة أم لا
       if (chatId) {
-        // We're in an existing chat, send the message using SignalR
         console.log("Sending message to existing chat:", chatId);
+
+        // نحن في محادثة موجودة - استخدم API لإرسال رسالة إلى الشات الحالي
         await connection.invoke("SendMessage", chatId, message);
       } else {
-        // We need to create a new chat first
-        console.log("Creating new chat for first message");
-        const response = await axiosInstance.post(
+        console.log("Creating new chat with message:", message);
+
+        // الخطوة 1: إنشاء محادثة جديدة أولاً
+        const createResponse = await axiosInstance.post(
           "Chat/Create",
-          {
-            modelId: "ce78f5da-85f7-4127-a393-0998046e7005", // Use appropriate model ID
-          },
+          { modelId: "9eee9813-6413-4947-9828-23e5719051f7" },
           {
             headers: {
               Authorization: `Bearer ${token}`,
@@ -321,30 +317,68 @@ function ChatPage() {
           }
         );
 
-        // Get the new chat ID from the response
-        const newChatId = response.data;
-        console.log("Created new chat with ID:", newChatId);
+        console.log("Response from creating new chat:", createResponse);
 
-        // Update URL without page refresh
-        window.history.pushState({}, "", `/chat/${newChatId}`);
+        // تحقق من الاستجابة
+        if (createResponse.data) {
+          console.log("Response data:", createResponse.data);
 
-        // Join the new chat session
-        await connection.invoke("JoinChatSession", newChatId);
-        console.log("Joined new chat session:", newChatId);
+          // تحقق من تنسيق الاستجابة
+          const newChatId =
+            createResponse.data.id ||
+            createResponse.data.chatId ||
+            createResponse.data;
 
-        // Send the message to the new chat
-        await connection.invoke("SendMessage", newChatId, message);
-        console.log("Sent message to new chat:", message);
+          if (newChatId) {
+            console.log("New chat created with ID:", newChatId);
 
-        // Reset first chunk reference for proper message handling
-        isFirstChunkRef.current = true;
+            // الخطوة 2: الآن أرسل الرسالة إلى المحادثة الجديدة
+            if (
+              connection &&
+              connection.state === signalR.HubConnectionState.Connected
+            ) {
+              await connection.invoke("SendMessage", newChatId, message);
+            } else {
+              // استخدام HTTP إذا لم يكن اتصال SignalR متاحاً
+              await axiosInstance.post(
+                `Chat/${newChatId}/message`,
+                { message },
+                {
+                  headers: {
+                    Authorization: `Bearer ${token}`,
+                  },
+                }
+              );
+            }
+
+            // انتقل إلى المحادثة الجديدة
+            navigate(`/chat/${newChatId}`);
+
+            // تحديث قائمة المحادثات في الشريط الجانبي
+            if (window.refreshChatSidebar) {
+              window.refreshChatSidebar();
+            }
+          } else {
+            throw new Error("Failed to extract chat ID from response");
+          }
+        } else {
+          throw new Error("No data in response");
+        }
       }
     } catch (error) {
-      console.error("❌ Error sending message:", error);
-      // In case of error, remove the pending message
+      console.error("Error sending message:", error);
+
+      // طباعة تفاصيل الخطأ للتصحيح
+      if (error.response) {
+        console.error("Response data:", error.response.data);
+        console.error("Response status:", error.response.status);
+      }
+
+      // إزالة الرسالة المعلقة في حالة حدوث خطأ
       setMessages((prev) =>
-        prev.filter((msg) => msg.id !== pendingAiMessageId)
+        prev.filter((msg) => !msg.id.includes("ai-pending-"))
       );
+
       setIsStreaming(false);
     }
   };
@@ -506,6 +540,13 @@ function ChatPage() {
             </div>
           </div>
         </div>
+      </div>
+      <div className="fixed bottom-5 w-full px-4">
+        <ChatInput
+          onSendMessage={handleSendMessage}
+          isStreaming={isStreaming}
+          onStopStream={stopStreamingResponse}
+        />
       </div>
     </div>
   );

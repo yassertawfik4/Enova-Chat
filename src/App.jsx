@@ -9,6 +9,7 @@ import { useLocation } from "react-router";
 import AgentPage from "./pages/agent/AgentPage";
 import ChatSideBar from "./components/SideBar/chatSideBar/ChatSideBar";
 import ProtectedRoute from "./routes/ProtectedRoute";
+import PromptPage from "./pages/prompt/PromptPage";
 
 const AppLayout = ({ children }) => {
   const location = useLocation();
@@ -25,7 +26,7 @@ const AppLayout = ({ children }) => {
           {/* Render ChatSideBar only on the chat page */}
         </div>
       )}
-      <div className="flex-1 ">{children}</div>
+      <div className="flex-1">{children}</div>
     </div>
   );
 };
@@ -42,6 +43,7 @@ function App() {
           <Route path="/" element={<ChatPage />} />
           <Route path="/chat/:chatId" element={<ChatPage />} />
           <Route path="/agents" element={<AgentPage />} />
+          <Route path="/prompts" element={<PromptPage />} />
           <Route
             path="/prompts"
             element={
