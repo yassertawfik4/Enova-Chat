@@ -11,27 +11,16 @@ function ChatPage() {
   const [isStreaming, setIsStreaming] = useState(false);
   const messagesEndRef = useRef(null);
   const navigate = useNavigate();
-  // مرجع لآخر معرف رسالة تم استلامها
   const lastMessageIdRef = useRef("");
-  // تتبع ما إذا كانت هذه أول قطعة في الرسالة
   const isFirstChunkRef = useRef(true);
-  // أضف مرجع للتتبع وقت التحميل
   const loadTimeRef = useRef(Date.now());
 
   const token =
     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwMTk1YTkxNC01ODc4LTdkMDQtYjE5NS1lODdlYmFlZGU3NzciLCJlbWFpbCI6Inlhc3NlcjFAbWFpbC5jb20iLCJuYW1lIjoieWFzc29yc3d4IiwianRpIjoiZGRlNzYxNTktMmQ0Yi00NjYyLWFiYzItNGQ2MTE3ZjdmYzdiIiwiYXVkIjpbIlN3YWdnZXJVSSIsIlN3YWdnZXJVSSJdLCJuYmYiOjE3NDI0MzUyNjUsImV4cCI6MTc0MzA0MDA2NSwiaWF0IjoxNzQyNDM1MjY1LCJpc3MiOiJJbnRlcm5zaGlwLVBsYXRmb3JtIn0.8F_tRBZ00HkA71adeI1VF_ZUZt_XL5sU4wqknF_kfIQ";
-  // const chatId = "0e3905bc-ebc4-4061-801c-18faf42a1ebf";
   const { chatId } = useParams();
-  console.log(chatId);
+  console.log("Current chatId:", chatId);
 
-  // إضافة وظيفة لمسح الرسائل
-  const clearMessages = useCallback(() => {
-    setMessages([]);
-    setIsStreaming(false);
-    lastMessageIdRef.current = "";
-    isFirstChunkRef.current = true;
-  }, []);
-
+  // Initialize SignalR connection
   useEffect(() => {
     const newConnection = new signalR.HubConnectionBuilder()
       .withUrl("http://localhost:5067/chatHub", {
@@ -64,14 +53,15 @@ function ChatPage() {
     };
   }, [chatId]);
 
+  // Set up SignalR event handlers
   useEffect(() => {
     if (!connection) return;
 
-    // معالجة استلام جزء من الرسالة
+    // Handle receiving a chunk of a message
     const handleReceiveMessageChunk = (messageId, chunk) => {
       console.log("📩 Received chunk:", messageId, chunk);
 
-      // تأكد من أن محتوى القطعة صالح وليست فارغة
+      // Make sure chunk content is valid
       const chunkContent = chunk || "";
       if (!chunkContent.trim()) {
         console.log("Skipping empty chunk");
@@ -80,13 +70,13 @@ function ChatPage() {
 
       setIsStreaming(true);
 
-      // إذا كان معرف الرسالة مختلفًا عن آخر معرف تم استلامه
-      // فهذا يعني أنها رسالة جديدة
+      // If this is a new message ID
       if (messageId !== lastMessageIdRef.current) {
         lastMessageIdRef.current = messageId;
+        isFirstChunkRef.current = true;
 
         setMessages((prev) => {
-          // ابحث عن رسالة معلقة فارغة لاستبدالها
+          // Look for pending empty message to replace
           const pendingIndex = prev.findIndex(
             (msg) =>
               !msg.isUser && !msg.complete && msg.id.startsWith("ai-pending-")
@@ -113,8 +103,10 @@ function ChatPage() {
             ];
           }
         });
+
+        isFirstChunkRef.current = false;
       } else {
-        // إضافة محتوى إلى رسالة موجودة بنفس المعرف
+        // Add content to an existing message with the same ID
         setMessages((prev) => {
           const messageIndex = prev.findIndex((msg) => msg.id === messageId);
 
@@ -122,9 +114,7 @@ function ChatPage() {
             const updatedMessages = [...prev];
             const currentText = updatedMessages[messageIndex].text;
 
-            // تجنب التكرار مع ضمان عرض الرسالة فوراً
-            // نتحقق فقط من التكرار إذا كانت القطعة أطول من حرف واحد
-            // لتجنب التأثير على الأداء عند عرض الرسالة حرفاً بحرف
+            // Avoid duplication while ensuring the message is displayed immediately
             if (chunkContent.length > 3 && currentText.endsWith(chunkContent)) {
               console.log("Skipping duplicate chunk:", chunkContent);
             } else {
@@ -142,7 +132,7 @@ function ChatPage() {
       }
     };
 
-    // تحسين معالجة نهاية بث الرسالة
+    // Handle end of message stream
     const handleEndMessageStream = (messageId) => {
       console.log("🏁 Finished streaming message:", messageId);
 
@@ -151,13 +141,11 @@ function ChatPage() {
         const index = updatedMessages.findIndex((msg) => msg.id === messageId);
 
         if (index !== -1) {
-          // وضع علامة على الرسالة كمكتملة
+          // Mark message as complete
           updatedMessages[index].complete = true;
-
-          // تنظيف محتمل للرسالة (إزالة النصوص المتكررة أو السطور الفارغة)
           updatedMessages[index].text = updatedMessages[index].text.trim();
 
-          // إذا كان المحتوى فارغًا بعد التنظيف، قم بإزالة الرسالة
+          // Remove message if empty after cleaning
           if (!updatedMessages[index].text) {
             return updatedMessages.filter((_, i) => i !== index);
           }
@@ -167,31 +155,30 @@ function ChatPage() {
       });
 
       setIsStreaming(false);
-      // إعادة تعيين مؤشر القطع الأولى للرسالة التالية
       isFirstChunkRef.current = true;
     };
 
-    // تحسين معالجة الرسائل الكاملة
+    // Handle receiving a complete message
     const handleReceiveMessage = (message) => {
       console.log("📩 Received complete message:", message);
 
-      // معالجة رسائل النموذج فقط، وليس رسائل المستخدم
+      // Only process model messages, not user messages
       if (!message.isFromUser) {
         let messageContent = message.content || "";
 
-        // التحقق من وجود رسالة للمستخدم وحذفها
+        // Check for user message and remove it
         const lastUserMessage = messages.findLast((msg) => msg.isUser)?.text;
         if (lastUserMessage && messageContent.includes(lastUserMessage)) {
           messageContent = messageContent.replace(lastUserMessage, "").trim();
         }
 
-        // تجاهل الرسائل الفارغة
+        // Ignore empty messages
         if (!messageContent.trim()) {
           console.log("Skipping empty message");
           return;
         }
 
-        // تحديث حالة الرسائل بشكل أكثر كفاءة
+        // Update messages state more efficiently
         setMessages((prev) => {
           // Find any pending message
           const pendingMessageIndex = prev.findIndex(
@@ -204,13 +191,13 @@ function ChatPage() {
           );
 
           if (existingMessageIndex >= 0) {
-            // تحديث رسالة موجودة
+            // Update existing message
             const updatedMessages = [...prev];
             updatedMessages[existingMessageIndex].text = messageContent;
             updatedMessages[existingMessageIndex].complete = true;
             return updatedMessages;
           } else if (pendingMessageIndex >= 0) {
-            // Replace the pending message with the complete message
+            // Replace pending message with complete message
             const updatedMessages = [...prev];
             updatedMessages[pendingMessageIndex] = {
               id: message.id,
@@ -220,7 +207,7 @@ function ChatPage() {
             };
             return updatedMessages;
           } else {
-            // إضافة رسالة جديدة فقط إذا كان المحتوى غير فارغ
+            // Add new message if content is not empty
             return [
               ...prev,
               {
@@ -237,7 +224,7 @@ function ChatPage() {
       setIsStreaming(false);
     };
 
-    // معالجة الأخطاء
+    // Handle errors
     const handleReceiveError = (error) => {
       console.error("❌ Received error:", error);
 
@@ -251,13 +238,13 @@ function ChatPage() {
       setIsStreaming(false);
     };
 
-    // تسجيل معالجات الأحداث
+    // Register event handlers
     connection.on("ReceiveMessageChunk", handleReceiveMessageChunk);
     connection.on("EndMessageStream", handleEndMessageStream);
     connection.on("ReceiveMessage", handleReceiveMessage);
     connection.on("ReceiveError", handleReceiveError);
 
-    // وظيفة التنظيف
+    // Cleanup function
     return () => {
       connection.off("ReceiveMessageChunk", handleReceiveMessageChunk);
       connection.off("EndMessageStream", handleEndMessageStream);
@@ -266,10 +253,10 @@ function ChatPage() {
     };
   }, [connection, messages]);
 
-  // تعديل دالة handleSendMessage
+  // Improved send message function
   const handleSendMessage = async (message) => {
     try {
-      // إضافة رسالة المستخدم إلى الواجهة فوراً
+      // Immediately add user message to UI
       const userMessageId = `user-${Date.now()}`;
       setMessages((prev) => [
         ...prev,
@@ -281,7 +268,7 @@ function ChatPage() {
         },
       ]);
 
-      // إضافة رسالة معلقة للذكاء الاصطناعي
+      // Add pending AI message placeholder
       const pendingMessageId = `ai-pending-${Date.now()}`;
       setMessages((prev) => [
         ...prev,
@@ -295,86 +282,32 @@ function ChatPage() {
 
       setIsStreaming(true);
 
-      console.log("Current chatId:", chatId);
-
-      // الخطوة 1: تحديد إذا كنا بحاجة لإنشاء محادثة جديدة أم لا
+      // Check if we're in an existing chat or need to create a new one
       if (chatId) {
         console.log("Sending message to existing chat:", chatId);
 
-        // نحن في محادثة موجودة - استخدم API لإرسال رسالة إلى الشات الحالي
-        await connection.invoke("SendMessage", chatId, message);
-      } else {
-        console.log("Creating new chat with message:", message);
-
-        // الخطوة 1: إنشاء محادثة جديدة أولاً
-        const createResponse = await axiosInstance.post(
-          "Chat/Create",
-          { modelId: "9eee9813-6413-4947-9828-23e5719051f7" },
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          }
-        );
-
-        console.log("Response from creating new chat:", createResponse);
-
-        // تحقق من الاستجابة
-        if (createResponse.data) {
-          console.log("Response data:", createResponse.data);
-
-          // تحقق من تنسيق الاستجابة
-          const newChatId =
-            createResponse.data.id ||
-            createResponse.data.chatId ||
-            createResponse.data;
-
-          if (newChatId) {
-            console.log("New chat created with ID:", newChatId);
-
-            // الخطوة 2: الآن أرسل الرسالة إلى المحادثة الجديدة
-            if (
-              connection &&
-              connection.state === signalR.HubConnectionState.Connected
-            ) {
-              await connection.invoke("SendMessage", newChatId, message);
-            } else {
-              // استخدام HTTP إذا لم يكن اتصال SignalR متاحاً
-              await axiosInstance.post(
-                `Chat/${newChatId}/message`,
-                { message },
-                {
-                  headers: {
-                    Authorization: `Bearer ${token}`,
-                  },
-                }
-              );
-            }
-
-            // انتقل إلى المحادثة الجديدة
-            navigate(`/chat/${newChatId}`);
-
-            // تحديث قائمة المحادثات في الشريط الجانبي
-            if (window.refreshChatSidebar) {
-              window.refreshChatSidebar();
-            }
-          } else {
-            throw new Error("Failed to extract chat ID from response");
-          }
+        if (
+          connection &&
+          connection.state === signalR.HubConnectionState.Connected
+        ) {
+          await connection.invoke("SendMessage", chatId, message);
         } else {
-          throw new Error("No data in response");
+          console.error("SignalR connection not available");
+          throw new Error("Unable to connect to chat server");
         }
+      } else {
+        console.warn("⚠️ No chatId found. Message not sent.");
       }
     } catch (error) {
       console.error("Error sending message:", error);
 
-      // طباعة تفاصيل الخطأ للتصحيح
+      // Print error details for debugging
       if (error.response) {
         console.error("Response data:", error.response.data);
         console.error("Response status:", error.response.status);
       }
 
-      // إزالة الرسالة المعلقة في حالة حدوث خطأ
+      // Remove pending message on error
       setMessages((prev) =>
         prev.filter((msg) => !msg.id.includes("ai-pending-"))
       );
@@ -383,8 +316,7 @@ function ChatPage() {
     }
   };
 
-  //fetch chat Id hestiory
-
+  // Function to get chat history by ID
   const getChatbyId = async () => {
     try {
       const response = await axiosInstance.get(`Chat/${chatId}`, {
@@ -392,133 +324,144 @@ function ChatPage() {
           Authorization: `Bearer ${token}`,
         },
       });
+
       if (response.data) {
         // Load chat messages
         if (response.data.messages && response.data.messages.length > 0) {
           const formattedMessages = response.data.messages.map((msg) => ({
             id: msg.id,
             text: msg.content,
-            isUser: !msg.isFromAi,
+            isUser: !msg.isFromAi, // Negate isFromAi to get isUser
             complete: true,
           }));
 
-          setMessages(formattedMessages);
+          setMessages((prev) => {
+            const existingIds = new Set(prev.map((msg) => msg.id));
+            const newMessages = formattedMessages.filter(
+              (msg) => !existingIds.has(msg.id)
+            );
+            return [...prev, ...newMessages];
+          });
         }
       }
-      console.log(response.data);
+      console.log("Chat history loaded:", response.data);
     } catch (error) {
-      console.log(error);
+      console.error("Error fetching chat history:", error);
     }
   };
 
-  // تعديل useEffect المسؤول عن التعامل مع تغيير chatId
+  // Handle chatId changes
   useEffect(() => {
-    // إعادة تعيين مرجع وقت التحميل عند كل تغيير في chatId
+    // Reset load time reference when chatId changes
     loadTimeRef.current = Date.now();
 
-    // مسح الرسائل بغض النظر عن وجود chatId
-    clearMessages();
+    // Clear messages when loading new chat
+    setMessages([]);
+    setIsStreaming(false);
+    lastMessageIdRef.current = "";
+    isFirstChunkRef.current = true;
 
-    // إذا كان هناك معرف محادثة، قم بتحميل محتواها
+    // If there's a chatId, load its content
     if (chatId) {
       getChatbyId();
     }
-  }, [chatId, clearMessages]);
+  }, [chatId]);
 
-  // إضافة useEffect جديد للتعامل مع الصفحة الرئيسية
+  // Handle homepage view
   useEffect(() => {
-    // التحقق إذا كنا في الصفحة الرئيسية (/)
+    // Check if we're on the homepage (/)
     if (window.location.pathname === "/") {
-      // تأكد من مسح الرسائل عند تحميل الصفحة الرئيسية
-      clearMessages();
-    }
-  }, [window.location.pathname, clearMessages]);
-
-  // في بداية تشغيل المكون، أضف دالة تحديث عامة
-  useEffect(() => {
-    // إتاحة وظيفة مسح الرسائل كدالة عامة للاستدعاء من أي مكان
-    window.refreshChatPage = () => {
-      clearMessages();
-    };
-
-    // التحقق من وحدة تخزين الجلسة
-    const shouldClear = sessionStorage.getItem("clearChat");
-    if (shouldClear === "true") {
-      clearMessages();
-      sessionStorage.removeItem("clearChat");
-    }
-
-    return () => {
-      // إزالة الوظيفة العامة عند إلغاء تحميل المكون
-      delete window.refreshChatPage;
-    };
-  }, [clearMessages]);
-
-  // Add a function to stop the stream
-  const stopStreamingResponse = () => {
-    if (connection) {
-      // Call the SignalR method to stop streaming
-      connection.invoke("StopGenerating").catch((err) => {
-        console.error("Error stopping generation:", err);
-      });
-
-      // Also update local state to reflect stopped streaming
+      // Make sure to clear messages when loading homepage
+      setMessages([]);
       setIsStreaming(false);
-
-      // Find the incomplete message and mark it as complete
-      setMessages((prev) => {
-        const updatedMessages = [...prev];
-        const streamingMessageIndex = updatedMessages.findIndex(
-          (msg) => !msg.complete && !msg.isUser
-        );
-
-        if (streamingMessageIndex !== -1) {
-          updatedMessages[streamingMessageIndex].complete = true;
-          // Optionally append a note that generation was stopped
-          // updatedMessages[streamingMessageIndex].text += " [Generation stopped]";
-        }
-
-        return updatedMessages;
-      });
+      lastMessageIdRef.current = "";
+      isFirstChunkRef.current = true;
     }
-  };
+  }, [window.location.pathname]);
 
+  // Function to stop streaming response
+  // const stopStreamingResponse = () => {
+  //   if (connection) {
+  //     // Call SignalR method to stop streaming
+  //     connection.invoke("StopGenerating").catch((err) => {
+  //       console.error("Error stopping generation:", err);
+  //     });
+
+  //     // Update local state to reflect stopped streaming
+  //     setIsStreaming(false);
+
+  //     // Find incomplete message and mark as complete
+  //     setMessages((prev) => {
+  //       const updatedMessages = [...prev];
+  //       const streamingMessageIndex = updatedMessages.findIndex(
+  //         (msg) => !msg.complete && !msg.isUser
+  //       );
+
+  //       if (streamingMessageIndex !== -1) {
+  //         updatedMessages[streamingMessageIndex].complete = true;
+  //       }
+
+  //       return updatedMessages;
+  //     });
+  //   }
+  // };
+
+  // Scroll to bottom when messages change
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+  // بعد تعريف handleSendMessage
+  useEffect(() => {
+    window.sendMessageAfterCreate = async (newChatId, message) => {
+      navigate(`/chat/${newChatId}`);
+
+      // 👇 استنى شوية علشان يكون حصل JoinChatSession
+      setTimeout(async () => {
+        if (
+          connection &&
+          connection.state === signalR.HubConnectionState.Connected
+        ) {
+          try {
+            await connection.invoke("JoinChatSession", newChatId);
+            console.log("✅ Joined new chat session after create:", newChatId);
+
+            // ابعت الرسالة بعد الـ Join
+            await handleSendMessage(message);
+          } catch (err) {
+            console.error("❌ Error joining new chat session:", err);
+          }
+        } else {
+          console.warn("⚠️ Connection not ready to send message after create");
+        }
+      }, 300);
+    };
+  }, [navigate, connection]);
   return (
     <div
       className={`flex flex-col ${
         messages.length < 0 ? "h-screen" : "h-auto"
       } overflow-hidden`}
     >
-      {" "}
-      {/* نمنع الـ scroll الخارجي */}
       <div className="flex flex-1 overflow-hidden">
-        {/* الشريط الجانبي */}
         <div className="flex flex-col justify-between p-4 w-full items-center">
-          {/* منطقة عرض الرسائل */}
+          {/* Message display area */}
           <div
-            className={`flex-1 w-full pb-40 ${
+            className={`flex-1 w-[750px] pb-40 ${
               messages.length === 0 ? "flex justify-center items-center" : ""
             }`}
           >
-            {messages.length > 0 &&
-              messages
-                .filter(
-                  (msg) =>
-                    (msg.text && msg.text.trim() !== "") ||
-                    (!msg.text && !msg.isUser && !msg.complete)
-                )
-                .map((msg, index) => (
-                  <ChatMessage
-                    key={`${msg.id}-${index}`}
-                    message={msg.text || ""}
-                    isUser={msg.isUser}
-                    isStreaming={!msg.complete && !msg.isUser && isStreaming}
-                  />
-                ))}
+            {messages.map((msg, index) => (
+              <ChatMessage
+                key={`${msg.id}-${index}`}
+                message={msg.text || ""}
+                isUser={msg.isUser}
+                isStreaming={!msg.complete && !msg.isUser && isStreaming}
+              />
+            ))}
             <div ref={messagesEndRef} />
           </div>
 
-          {/* منطقة الإدخال مع العنوان */}
+          {/* Input area with title */}
           <div
             className={`w-full flex flex-col items-center bg-white pb-10 pt- px-10 ${
               messages.length === 0
@@ -535,18 +478,11 @@ function ChatPage() {
               <ChatInput
                 onSendMessage={handleSendMessage}
                 isStreaming={isStreaming}
-                onStopStream={stopStreamingResponse}
+                // onStopStream={stopStreamingResponse}
               />
             </div>
           </div>
         </div>
-      </div>
-      <div className="fixed bottom-5 w-full px-4">
-        <ChatInput
-          onSendMessage={handleSendMessage}
-          isStreaming={isStreaming}
-          onStopStream={stopStreamingResponse}
-        />
       </div>
     </div>
   );

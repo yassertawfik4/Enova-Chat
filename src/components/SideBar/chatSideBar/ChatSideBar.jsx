@@ -10,11 +10,12 @@ import { useEffect, useState } from "react";
 import axiosInstance from "../../../api/axiosInstance";
 import { Link, useNavigate } from "react-router";
 import { IoMdCloseCircleOutline } from "react-icons/io";
+import { startNewChatWithMessage } from "../../../utils/chatHelpers";
 
 function ChatSideBar() {
   const [allChats, setAllChats] = useState([]);
   const navigate = useNavigate();
-  
+
   const fetchAllChats = async () => {
     try {
       const response = await axiosInstance.get("Chat/GetAll", {
@@ -28,7 +29,7 @@ function ChatSideBar() {
       console.log(error);
     }
   };
-  
+
   useEffect(() => {
     fetchAllChats();
 
@@ -36,48 +37,39 @@ function ChatSideBar() {
 
     return () => clearInterval(refreshInterval);
   }, []);
-  
+
   const refreshChats = () => {
     fetchAllChats();
   };
-  
+
   window.refreshChatSidebar = refreshChats;
-  
-  const handelNewChat = () => {
-    sessionStorage.setItem("clearChat", "true");
-    navigate("/");
-    setTimeout(() => {
-      if (window.refreshChatPage) {
-        window.refreshChatPage();
-      }
-      fetchAllChats();
-    }, 100);
-  };
-  
+
   const handelDeleteButton = async (e, chatId) => {
     e.preventDefault(); // Prevent navigation from Link
     e.stopPropagation(); // Prevent event bubbling
-    
+
     try {
       const response = await axiosInstance.delete(`Chat/${chatId}`, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem("accessUsertoken")}`,
         },
       });
-      
+
       if (response.status === 200) {
         // Immediately update the local state to remove the deleted chat
-        setAllChats(prevChats => prevChats.filter(chat => chat.id !== chatId));
-        
+        setAllChats((prevChats) =>
+          prevChats.filter((chat) => chat.id !== chatId)
+        );
+
         // If we're on the deleted chat's page, navigate to home
         const currentPath = window.location.pathname;
         if (currentPath.includes(`/chat/${chatId}`)) {
           navigate("/");
         }
-        
+
         // Refresh the chat sidebar
         fetchAllChats();
-        
+
         // If there's a refreshChatPage function, call it
         if (window.refreshChatPage) {
           window.refreshChatPage();
@@ -87,7 +79,15 @@ function ChatSideBar() {
       console.log(error);
     }
   };
-  
+  // داخل handelNewChat
+  const handelNewChat = () => {
+    sessionStorage.setItem("clearChat", "true");
+    navigate("/");
+
+    if (window.refreshChatPage) {
+      window.refreshChatPage();
+    }
+  };
   return (
     <div className="bg-[#F4F6FF] h-screen rounded-[48px] w-[305px] left-0 ms-2 py-2 sticky top-0 z-10">
       <div className="flex justify-center items-center py-6">
