@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import * as signalR from "@microsoft/signalr";
 import ChatInput from "../../components/chat/ChatInput";
 import ChatMessage from "../../components/chat/ChatMessage";
@@ -9,6 +9,9 @@ function ChatPage() {
   const [messages, setMessages] = useState([]);
   const [connection, setConnection] = useState(null);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [currentResponseMessageId, setCurrentResponseMessageId] =
+    useState(null);
+
   const messagesEndRef = useRef(null);
   const navigate = useNavigate();
   const lastMessageIdRef = useRef("");
@@ -16,7 +19,7 @@ function ChatPage() {
   const loadTimeRef = useRef(Date.now());
 
   const token =
-    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwMTk1YTkxNC01ODc4LTdkMDQtYjE5NS1lODdlYmFlZGU3NzciLCJlbWFpbCI6Inlhc3NlcjFAbWFpbC5jb20iLCJuYW1lIjoieWFzc29yc3d4IiwianRpIjoiZGRlNzYxNTktMmQ0Yi00NjYyLWFiYzItNGQ2MTE3ZjdmYzdiIiwiYXVkIjpbIlN3YWdnZXJVSSIsIlN3YWdnZXJVSSJdLCJuYmYiOjE3NDI0MzUyNjUsImV4cCI6MTc0MzA0MDA2NSwiaWF0IjoxNzQyNDM1MjY1LCJpc3MiOiJJbnRlcm5zaGlwLVBsYXRmb3JtIn0.8F_tRBZ00HkA71adeI1VF_ZUZt_XL5sU4wqknF_kfIQ";
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwMTk1ZDc5ZS1kYzMwLTcxYWItODg2NC1lNDhlYmUxN2U4MGYiLCJlbWFpbCI6Inlhc3NlcjFAbWFpbC5jb20iLCJuYW1lIjoieWFzc29yc3d4IiwianRpIjoiYjc0ODU5OGQtM2IxYi00OGUzLTg2OTAtY2RkNzY5Yjc1NTIyIiwiYXVkIjpbIlN3YWdnZXJVSSIsIlN3YWdnZXJVSSJdLCJuYmYiOjE3NDM2NzMyNDksImV4cCI6MTc0NDI3ODA0OSwiaWF0IjoxNzQzNjczMjQ5LCJpc3MiOiJJbnRlcm5zaGlwLVBsYXRmb3JtIn0.R_lrK2noNHiv1vHDpS9ed9-bFjmMvfg307E37YDZnfI";
   const { chatId } = useParams();
   console.log("Current chatId:", chatId);
 
@@ -74,6 +77,7 @@ function ChatPage() {
       if (messageId !== lastMessageIdRef.current) {
         lastMessageIdRef.current = messageId;
         isFirstChunkRef.current = true;
+        setCurrentResponseMessageId(messageId);
 
         setMessages((prev) => {
           // Look for pending empty message to replace
@@ -290,7 +294,8 @@ function ChatPage() {
           connection &&
           connection.state === signalR.HubConnectionState.Connected
         ) {
-          await connection.invoke("SendMessage", chatId, message);
+          // Pass null for fileIds if no files are attached
+          await connection.invoke("SendMessage", chatId, message, null);
         } else {
           console.error("SignalR connection not available");
           throw new Error("Unable to connect to chat server");
@@ -380,33 +385,41 @@ function ChatPage() {
   }, [window.location.pathname]);
 
   // Function to stop streaming response
-  // const stopStreamingResponse = () => {
-  //   if (connection) {
-  //     // Call SignalR method to stop streaming
-  //     connection.invoke("StopGenerating").catch((err) => {
-  //       console.error("Error stopping generation:", err);
-  //     });
+  const stopGenerate = async () => {
+    try {
+      if (!currentResponseMessageId || !isStreaming) return;
 
-  //     // Update local state to reflect stopped streaming
-  //     setIsStreaming(false);
+      await axiosInstance.post(
+        `chat/StopResponse/${currentResponseMessageId}`,
+        null,
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("accessUsertoken")}`,
+          },
+        }
+      );
 
-  //     // Find incomplete message and mark as complete
-  //     setMessages((prev) => {
-  //       const updatedMessages = [...prev];
-  //       const streamingMessageIndex = updatedMessages.findIndex(
-  //         (msg) => !msg.complete && !msg.isUser
-  //       );
+      setIsStreaming(false);
 
-  //       if (streamingMessageIndex !== -1) {
-  //         updatedMessages[streamingMessageIndex].complete = true;
-  //       }
+      // حط العلامة في الرسالة بدلاً من حذفها
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === currentResponseMessageId
+            ? {
+                ...msg,
+                text: msg.text.trim(),
+                complete: true,
+              }
+            : msg
+        )
+      );
 
-  //       return updatedMessages;
-  //     });
-  //   }
-  // };
-
-  // Scroll to bottom when messages change
+      setCurrentResponseMessageId(null);
+      console.log("✋ Response stopped and message marked.");
+    } catch (error) {
+      console.error("❌ Error stopping response:", error);
+    }
+  };
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
@@ -478,7 +491,10 @@ function ChatPage() {
               <ChatInput
                 onSendMessage={handleSendMessage}
                 isStreaming={isStreaming}
+                stopGenerate={stopGenerate}
                 // onStopStream={stopStreamingResponse}
+                currentResponseMessageId={currentResponseMessageId} // 👈 ضيفه هنا
+                connection={connection}
               />
             </div>
           </div>

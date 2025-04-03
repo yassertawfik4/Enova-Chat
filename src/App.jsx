@@ -10,6 +10,9 @@ import AgentPage from "./pages/agent/AgentPage";
 import ChatSideBar from "./components/SideBar/chatSideBar/ChatSideBar";
 import ProtectedRoute from "./routes/ProtectedRoute";
 import PromptPage from "./pages/prompt/PromptPage";
+import PluginPage from "./pages/plugin/PluginPage";
+import ModelsPage from "./pages/models/ModelsPage";
+import SettingsPage from "./pages/settings/SettingsPage";
 
 const AppLayout = ({ children }) => {
   const location = useLocation();
@@ -52,30 +55,9 @@ function App() {
               </div>
             }
           />
-          <Route
-            path="/plugins"
-            element={
-              <div>
-                <h1>Plugins Page</h1>
-              </div>
-            }
-          />
-          <Route
-            path="/models"
-            element={
-              <div>
-                <h1>Models Page</h1>
-              </div>
-            }
-          />
-          <Route
-            path="/settings"
-            element={
-              <div>
-                <h1>Settings Page</h1>
-              </div>
-            }
-          />
+          <Route path="/plugins" element={<PluginPage />} />
+          <Route path="/models" element={<ModelsPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
         </Route>
       </Routes>
     </AppLayout>

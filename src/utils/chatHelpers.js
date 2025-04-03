@@ -6,7 +6,7 @@ export const startNewChatWithMessage = async ({ message, token, navigate }) => {
   try {
     const res = await axiosInstance.post(
       "Chat/Create",
-      { modelId: "9eee9813-6413-4947-9828-23e5719051f7" },
+      { modelId: "27d07a41-874c-4e83-8d9a-57434a5054fa" },
       {
         headers: {
           Authorization: `Bearer ${token}`,

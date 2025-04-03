@@ -5,7 +5,7 @@ import { AiOutlineFolderAdd } from "react-icons/ai";
 import { MdChecklistRtl } from "react-icons/md";
 import { TfiFilter } from "react-icons/tfi";
 import { FaSortAlphaDownAlt } from "react-icons/fa";
-import chatgptLogo from "/public/images/gptimage.png";
+import chatgptLogo from "/public/images/icons/gptimage.png";
 import { useEffect, useState } from "react";
 import axiosInstance from "../../../api/axiosInstance";
 import { Link, useNavigate } from "react-router";
