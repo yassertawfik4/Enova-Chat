@@ -11,7 +11,7 @@ const ChatInput = ({
   connection,
   stopGenerate,
   isStreaming,
-  currentResponseMessageId, // 👈 هنا كمان
+  currentResponseMessageId,
 }) => {
   const { chatId } = useParams();
   const navigate = useNavigate();
@@ -34,10 +34,12 @@ const ChatInput = ({
 
     resetForm();
   };
+
   useEffect(() => {
     console.log("🔥 isStreaming:", isStreaming);
     console.log("🆔 currentResponseMessageId:", currentResponseMessageId);
   }, [isStreaming, currentResponseMessageId]);
+
   return (
     <Formik initialValues={{ message: "" }} onSubmit={handleSubmit}>
       {({ values }) => (
@@ -55,7 +57,7 @@ const ChatInput = ({
             placeholder="Type a message..."
             className="bg-white border h-[88px] p-2 rounded-[50px] w-full outline-none px-5"
           />
-          {isStreaming && currentResponseMessageId ? (
+          {isStreaming ? (
             <button
               type="button"
               onClick={stopGenerate}

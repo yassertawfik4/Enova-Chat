@@ -18,10 +18,9 @@ function ChatPage() {
   const isFirstChunkRef = useRef(true);
   const loadTimeRef = useRef(Date.now());
 
-  const token =
-    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwMTk1ZDc5ZS1kYzMwLTcxYWItODg2NC1lNDhlYmUxN2U4MGYiLCJlbWFpbCI6Inlhc3NlcjFAbWFpbC5jb20iLCJuYW1lIjoieWFzc29yc3d4IiwianRpIjoiYjc0ODU5OGQtM2IxYi00OGUzLTg2OTAtY2RkNzY5Yjc1NTIyIiwiYXVkIjpbIlN3YWdnZXJVSSIsIlN3YWdnZXJVSSJdLCJuYmYiOjE3NDM2NzMyNDksImV4cCI6MTc0NDI3ODA0OSwiaWF0IjoxNzQzNjczMjQ5LCJpc3MiOiJJbnRlcm5zaGlwLVBsYXRmb3JtIn0.R_lrK2noNHiv1vHDpS9ed9-bFjmMvfg307E37YDZnfI";
+  const token = localStorage.getItem("accessUsertoken");
+
   const { chatId } = useParams();
-  console.log("Current chatId:", chatId);
 
   // Initialize SignalR connection
   useEffect(() => {
@@ -37,7 +36,6 @@ function ChatPage() {
     newConnection
       .start()
       .then(() => {
-        console.log("✅ Connected to SignalR Hub");
         if (chatId) {
           return newConnection.invoke("JoinChatSession", chatId);
         }
@@ -62,8 +60,6 @@ function ChatPage() {
 
     // Handle receiving a chunk of a message
     const handleReceiveMessageChunk = (messageId, chunk) => {
-      console.log("📩 Received chunk:", messageId, chunk);
-
       // Make sure chunk content is valid
       const chunkContent = chunk || "";
       if (!chunkContent.trim()) {
@@ -78,14 +74,12 @@ function ChatPage() {
         lastMessageIdRef.current = messageId;
         isFirstChunkRef.current = true;
         setCurrentResponseMessageId(messageId);
-
         setMessages((prev) => {
           // Look for pending empty message to replace
           const pendingIndex = prev.findIndex(
             (msg) =>
               !msg.isUser && !msg.complete && msg.id.startsWith("ai-pending-")
           );
-
           if (pendingIndex >= 0) {
             const updatedMessages = [...prev];
             updatedMessages[pendingIndex] = {
@@ -135,10 +129,54 @@ function ChatPage() {
         });
       }
     };
+    const handleReceiveMessage = (message) => {
+      console.log("📩 Received complete message:", message);
 
+      if (!message.isFromUser) {
+        let messageContent = message.content || "";
+        const lastUserMessage = messages.findLast((msg) => msg.isUser)?.text;
+
+        if (lastUserMessage && messageContent.includes(lastUserMessage)) {
+          messageContent = messageContent.replace(lastUserMessage, "").trim();
+        }
+
+        if (!messageContent.trim()) {
+          console.log("Skipping empty message");
+          return;
+        }
+
+        setMessages((prev) => {
+          const updated = [...prev];
+          const index = updated.findIndex(
+            (msg) =>
+              msg.id === message.id ||
+              (!msg.isUser && !msg.complete && msg.id.startsWith("ai-pending-"))
+          );
+
+          if (index >= 0) {
+            updated[index] = {
+              id: message.id,
+              text: messageContent,
+              isUser: false,
+              complete: true,
+            };
+          } else {
+            updated.push({
+              id: message.id,
+              text: messageContent,
+              isUser: false,
+              complete: true,
+            });
+          }
+
+          return updated;
+        });
+
+        setIsStreaming(false);
+      }
+    };
     // Handle end of message stream
     const handleEndMessageStream = (messageId) => {
-      console.log("🏁 Finished streaming message:", messageId);
 
       setMessages((prev) => {
         const updatedMessages = [...prev];
@@ -159,74 +197,11 @@ function ChatPage() {
       });
 
       setIsStreaming(false);
+      
       isFirstChunkRef.current = true;
     };
 
     // Handle receiving a complete message
-    const handleReceiveMessage = (message) => {
-      console.log("📩 Received complete message:", message);
-
-      // Only process model messages, not user messages
-      if (!message.isFromUser) {
-        let messageContent = message.content || "";
-
-        // Check for user message and remove it
-        const lastUserMessage = messages.findLast((msg) => msg.isUser)?.text;
-        if (lastUserMessage && messageContent.includes(lastUserMessage)) {
-          messageContent = messageContent.replace(lastUserMessage, "").trim();
-        }
-
-        // Ignore empty messages
-        if (!messageContent.trim()) {
-          console.log("Skipping empty message");
-          return;
-        }
-
-        // Update messages state more efficiently
-        setMessages((prev) => {
-          // Find any pending message
-          const pendingMessageIndex = prev.findIndex(
-            (msg) =>
-              !msg.isUser && !msg.complete && msg.id.startsWith("ai-pending-")
-          );
-
-          const existingMessageIndex = prev.findIndex(
-            (msg) => msg.id === message.id
-          );
-
-          if (existingMessageIndex >= 0) {
-            // Update existing message
-            const updatedMessages = [...prev];
-            updatedMessages[existingMessageIndex].text = messageContent;
-            updatedMessages[existingMessageIndex].complete = true;
-            return updatedMessages;
-          } else if (pendingMessageIndex >= 0) {
-            // Replace pending message with complete message
-            const updatedMessages = [...prev];
-            updatedMessages[pendingMessageIndex] = {
-              id: message.id,
-              text: messageContent,
-              isUser: false,
-              complete: true,
-            };
-            return updatedMessages;
-          } else {
-            // Add new message if content is not empty
-            return [
-              ...prev,
-              {
-                id: message.id,
-                text: messageContent,
-                isUser: false,
-                complete: true,
-              },
-            ];
-          }
-        });
-      }
-
-      setIsStreaming(false);
-    };
 
     // Handle errors
     const handleReceiveError = (error) => {
@@ -288,7 +263,6 @@ function ChatPage() {
 
       // Check if we're in an existing chat or need to create a new one
       if (chatId) {
-        console.log("Sending message to existing chat:", chatId);
 
         if (
           connection &&
@@ -349,7 +323,6 @@ function ChatPage() {
           });
         }
       }
-      console.log("Chat history loaded:", response.data);
     } catch (error) {
       console.error("Error fetching chat history:", error);
     }
@@ -415,7 +388,6 @@ function ChatPage() {
       );
 
       setCurrentResponseMessageId(null);
-      console.log("✋ Response stopped and message marked.");
     } catch (error) {
       console.error("❌ Error stopping response:", error);
     }
@@ -436,7 +408,6 @@ function ChatPage() {
         ) {
           try {
             await connection.invoke("JoinChatSession", newChatId);
-            console.log("✅ Joined new chat session after create:", newChatId);
 
             // ابعت الرسالة بعد الـ Join
             await handleSendMessage(message);
@@ -492,8 +463,7 @@ function ChatPage() {
                 onSendMessage={handleSendMessage}
                 isStreaming={isStreaming}
                 stopGenerate={stopGenerate}
-                // onStopStream={stopStreamingResponse}
-                currentResponseMessageId={currentResponseMessageId} // 👈 ضيفه هنا
+                currentResponseMessageId={currentResponseMessageId}
                 connection={connection}
               />
             </div>

@@ -1,5 +1,4 @@
 // utils/chatHelpers.js
-import * as signalR from "@microsoft/signalr";
 import axiosInstance from "../api/axiosInstance";
 
 export const startNewChatWithMessage = async ({ message, token, navigate }) => {
